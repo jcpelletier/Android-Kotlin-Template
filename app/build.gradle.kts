@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android") version "1.9.10"
 }
 
+val githubRunNumberProvider = providers.environmentVariable("GITHUB_RUN_NUMBER")
+val resolvedRunNumber = githubRunNumberProvider.orElse("1").map(String::toInt)
+
 android {
     namespace = "com.example.helloworld"
     compileSdk = 34
@@ -11,8 +14,8 @@ android {
         applicationId = "com.example.helloworld"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = resolvedRunNumber.getOrElse(1)
+        versionName = "1.0.${resolvedRunNumber.getOrElse(1)}"
     }
 
     buildTypes {
@@ -42,6 +45,15 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        val buildNumber = githubRunNumberProvider.orElse("1")
+        variant.outputs.forEach { output ->
+            output.outputFileName.set("app-debug-${buildNumber.get()}.apk")
         }
     }
 }
