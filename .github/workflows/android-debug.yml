@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_RUN_NUMBER: ${{ github.run_number }}
 
     steps:
       - name: Check out source
