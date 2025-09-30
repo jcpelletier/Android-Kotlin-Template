@@ -66,6 +66,10 @@ androidComponents {
             doLast {
                 val runNumber = buildNumber.get()
                 val sourceFile = apkProvider.get().asFile
+                if (!sourceFile.exists()) {
+                    logger.warn("Expected APK at \"${sourceFile.absolutePath}\" but it was not found; skipping rename")
+                    return@doLast
+                }
                 val renamedFile = sourceFile.parentFile.resolve("app-debug-$runNumber.apk")
                 Files.move(
                     sourceFile.toPath(),
