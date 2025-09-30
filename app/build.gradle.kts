@@ -1,4 +1,4 @@
-import com.android.build.api.variant.ApkVariantOutput
+import com.android.build.api.variant.VariantOutputConfiguration
 
 plugins {
     id("com.android.application") version "8.1.4"
@@ -54,11 +54,13 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         val buildNumber = githubRunNumberProvider.orElse("1")
-        variant.outputs.forEach { output ->
-            if (output is ApkVariantOutput) {
+        variant.outputs
+            .filter { output ->
+                output.outputType == VariantOutputConfiguration.OutputType.SINGLE
+            }
+            .forEach { output ->
                 output.outputFileName.set("app-debug-${buildNumber.get()}.apk")
             }
-        }
     }
 }
 
