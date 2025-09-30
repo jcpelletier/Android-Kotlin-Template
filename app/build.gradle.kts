@@ -1,3 +1,4 @@
+import com.android.build.api.variant.ApkVariantOutput
 import com.android.build.api.variant.VariantOutputConfiguration
 
 plugins {
@@ -59,7 +60,9 @@ androidComponents {
                 output.outputType == VariantOutputConfiguration.OutputType.SINGLE
             }
             .forEach { output ->
-                output.outputFileName.set("app-debug-${buildNumber.get()}.apk")
+                if (output is ApkVariantOutput) {
+                    output.outputFileName.set("app-debug-${buildNumber.get()}.apk")
+                }
             }
     }
 }
