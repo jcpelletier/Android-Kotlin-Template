@@ -75,7 +75,8 @@ androidComponents {
             }
         }
 
-        variant.assembleProvider?.configure {
+        val packageTaskName = "package${capitalizedVariantName}"
+        tasks.named(packageTaskName).configure {
             finalizedBy(renameTask)
         }
     }
