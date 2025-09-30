@@ -1,5 +1,7 @@
-import com.android.build.api.variant.ApkVariantOutput
-import com.android.build.api.variant.VariantOutputConfiguration
+import com.android.build.api.artifact.SingleArtifact
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.Locale
 
 plugins {
     id("com.android.application") version "8.1.4"
@@ -55,15 +57,27 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("debug")) { variant ->
         val buildNumber = githubRunNumberProvider.orElse("1")
-        variant.outputs
-            .filter { output ->
-                output.outputType == VariantOutputConfiguration.OutputType.SINGLE
+        val capitalizedVariantName = variant.name.replaceFirstChar { char ->
+            if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
+        }
+        val apkProvider = variant.artifacts.get(SingleArtifact.APK)
+
+        val renameTask = tasks.register("rename${capitalizedVariantName}Apk") {
+            doLast {
+                val runNumber = buildNumber.get()
+                val sourceFile = apkProvider.get().asFile
+                val renamedFile = sourceFile.parentFile.resolve("app-debug-$runNumber.apk")
+                Files.move(
+                    sourceFile.toPath(),
+                    renamedFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
             }
-            .forEach { output ->
-                if (output is ApkVariantOutput) {
-                    output.outputFileName.set("app-debug-${buildNumber.get()}.apk")
-                }
-            }
+        }
+
+        variant.assembleProvider?.configure {
+            finalizedBy(renameTask)
+        }
     }
 }
 
