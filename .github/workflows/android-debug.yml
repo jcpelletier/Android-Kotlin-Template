@@ -48,8 +48,21 @@ jobs:
       - name: Assemble Debug APK
         run: ./gradlew :app:assembleDebug
 
+      - name: Verify APK exists
+        run: |
+          FILE="app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$FILE" ]; then
+            echo "❌ Error: APK not found, build failed or output path is wrong."
+            exit 1
+          fi
+          if [ ! -s "$FILE" ]; then
+            echo "❌ Error: APK file is empty (0 bytes)."
+            exit 1
+          fi
+          echo "✅ APK found at $FILE"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug-${{ github.run_number }}.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
