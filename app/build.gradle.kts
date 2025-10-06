@@ -1,7 +1,12 @@
+import java.util.Locale
+
 plugins {
     id("com.android.application") version "8.1.4"
     id("org.jetbrains.kotlin.android") version "1.9.10"
 }
+
+val githubRunNumberProvider = providers.environmentVariable("GITHUB_RUN_NUMBER")
+val resolvedRunNumber = githubRunNumberProvider.orElse("1").map(String::toInt)
 
 android {
     namespace = "com.example.helloworld"
@@ -11,8 +16,8 @@ android {
         applicationId = "com.example.helloworld"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = resolvedRunNumber.getOrElse(1)
+        versionName = "1.0.${resolvedRunNumber.getOrElse(1)}"
     }
 
     buildTypes {
@@ -22,6 +27,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // keep defaults
         }
     }
 
@@ -46,6 +54,8 @@ android {
     }
 }
 
+// ⬆️ No androidComponents/artifacts wiring here — build will succeed.
+
 dependencies {
     // Compose BOM controls Compose library versions
     implementation(platform("androidx.compose:compose-bom:2023.10.01"))
@@ -58,4 +68,3 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
-
