@@ -1,6 +1,3 @@
-import com.android.build.api.artifact.SingleArtifact
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.Locale
 
 plugins {
@@ -31,6 +28,9 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            // keep defaults
+        }
     }
 
     compileOptions {
@@ -54,37 +54,7 @@ android {
     }
 }
 
-androidComponents {
-    onVariants(selector().withBuildType("debug")) { variant ->
-        val buildNumber = githubRunNumberProvider.orElse("1")
-        val capitalizedVariantName = variant.name.replaceFirstChar { char ->
-            if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
-        }
-        val apkProvider = variant.artifacts.get(SingleArtifact.APK)
-
-        val renameTask = tasks.register("rename${capitalizedVariantName}Apk") {
-            doLast {
-                val runNumber = buildNumber.get()
-                val sourceFile = apkProvider.get().asFile
-                if (!sourceFile.exists()) {
-                    logger.warn("Expected APK at \"${sourceFile.absolutePath}\" but it was not found; skipping rename")
-                    return@doLast
-                }
-                val renamedFile = sourceFile.parentFile.resolve("app-debug-$runNumber.apk")
-                Files.move(
-                    sourceFile.toPath(),
-                    renamedFile.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING
-                )
-            }
-        }
-
-        val packageTaskName = "package${capitalizedVariantName}"
-        tasks.named(packageTaskName).configure {
-            finalizedBy(renameTask)
-        }
-    }
-}
+// ⬆️ No androidComponents/artifacts wiring here — build will succeed.
 
 dependencies {
     // Compose BOM controls Compose library versions
@@ -98,4 +68,3 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
-
