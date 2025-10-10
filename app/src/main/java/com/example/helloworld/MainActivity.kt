@@ -34,6 +34,7 @@ import androidx.compose.ui.input.pointer.awaitPointerEvent
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.layout.onSizeChanged
+import com.example.helloworld.R
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -359,7 +361,7 @@ private fun GameScreen() {
 private fun BoxScope.ReadyOverlay() {
     Box(modifier = Modifier.align(Alignment.Center)) {
         Text(
-            text = "READY!",
+            text = stringResource(R.string.ready_label),
             fontSize = 48.sp,
             fontWeight = FontWeight.Black,
             color = Color.White,
