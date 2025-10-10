@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.awaitPointerEvent
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -387,16 +388,18 @@ private fun VirtualJoystick(
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val center = Offset(size.width / 2f, size.height / 2f)
-                    var current = down
-                    do {
-                        val offset = current.position - center
-                        val clamped = clampOffset(offset, outerRadius)
-                        knobOffset = clamped
-                        onVectorChange(clamped / outerRadius)
-                        val event = awaitPointerEvent()
-                        current = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (current.changedToUp()) break
-                    } while (current.pressed)
+                    awaitPointerEventScope {
+                        var current = down
+                        do {
+                            val offset = current.position - center
+                            val clamped = clampOffset(offset, outerRadius)
+                            knobOffset = clamped
+                            onVectorChange(clamped / outerRadius)
+                            val event = awaitPointerEvent()
+                            current = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (current.changedToUp()) break
+                        } while (current.pressed)
+                    }
                     knobOffset = Offset.Zero
                     onVectorChange(Offset.Zero)
                 }
@@ -425,13 +428,15 @@ private fun FireButton(
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     onPressedChange(true)
-                    do {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id }
-                        if (change == null || change.changedToUp()) {
-                            break
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null || change.changedToUp()) {
+                                break
+                            }
                         }
-                    } while (true)
+                    }
                     onPressedChange(false)
                 }
             }
