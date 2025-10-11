@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalComposeApi::class)
 @Composable
 private fun GameScreen() {
     val density = LocalDensity.current
