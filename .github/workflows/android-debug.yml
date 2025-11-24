@@ -26,6 +26,8 @@ jobs:
         env:
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          ls -la "${ANDROID_SDK_ROOT}" || true
           set -u
           if [[ -x "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" ]]; then
             SDKMGR="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
@@ -33,14 +35,19 @@ jobs:
             SDKMGR="$(ls -d "${ANDROID_SDK_ROOT}"/cmdline-tools/*/bin 2>/dev/null | head -n1)/sdkmanager"
           fi
           echo "Using sdkmanager at: ${SDKMGR}"
+          echo "sdkmanager version:"
+          "${SDKMGR}" --version || true
           yes | "${SDKMGR}" --licenses >/dev/null 2>&1 || true
           pkgs=("platform-tools" "platforms;android-34" "build-tools;34.0.0")
           for attempt in {1..3}; do
+            echo "Installing Android packages (attempt ${attempt})"
             "${SDKMGR}" --install "${pkgs[@]}" && ok=1 && break
             echo "sdkmanager failed (attempt ${attempt}); sleeping 10s and retrying..."
             sleep 10
           done
           [[ "${ok:-0}" == "1" ]] || { echo "sdkmanager failed after 3 attempts"; exit 1; }
+          echo "Installed packages:"
+          "${SDKMGR}" --list_installed || true
 
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
