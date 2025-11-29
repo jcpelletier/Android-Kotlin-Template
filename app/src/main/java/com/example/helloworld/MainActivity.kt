@@ -1,6 +1,7 @@
 package com.example.helloworld
 
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -14,7 +15,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.ExperimentalComposeApi
-import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
@@ -38,7 +47,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -68,6 +80,7 @@ private fun GameScreen() {
     val bottomOffset = triangleHeight / 3f
     val projectileSpeed = 750f * 4f
     val projectileSize = with(density) { Offset(12.dp.toPx(), 20.dp.toPx()) }
+    val shotIntervalMillis = 333L
 
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
     var triangleCenter by remember { mutableStateOf(Offset.Zero) }
@@ -75,6 +88,33 @@ private fun GameScreen() {
     val projectiles = remember { mutableStateListOf<Projectile>() }
     var joystickBounds by remember { mutableStateOf<Rect?>(null) }
     var lastShotTimeMillis by remember { mutableStateOf(0L) }
+    val firingJobs = remember { mutableStateMapOf<PointerId, Job>() }
+    val coroutineScope = rememberCoroutineScope()
+
+    fun tryFireProjectile(now: Long) {
+        if (triangleCenter == Offset.Zero) return
+        if (now - lastShotTimeMillis >= shotIntervalMillis) {
+            projectiles.add(Projectile(center = triangleCenter, size = projectileSize))
+            lastShotTimeMillis = now
+        }
+    }
+
+    fun startContinuousFire(pointerId: PointerId) {
+        if (firingJobs.containsKey(pointerId)) return
+        val job = coroutineScope.launch {
+            while (isActive) {
+                val now = SystemClock.uptimeMillis()
+                tryFireProjectile(now)
+                val waitTime = (shotIntervalMillis - (now - lastShotTimeMillis)).coerceAtLeast(16L)
+                delay(waitTime)
+            }
+        }
+        firingJobs[pointerId] = job
+    }
+
+    fun stopContinuousFire(pointerId: PointerId) {
+        firingJobs.remove(pointerId)?.cancel()
+    }
 
     LaunchedEffect(containerSize) {
         if (containerSize != IntSize.Zero) {
@@ -127,19 +167,20 @@ private fun GameScreen() {
                             if (change.changedToDownIgnoreConsumed()) {
                                 val startedInJoystick = joystickBounds?.contains(change.position) == true
                                 pointerStartsInJoystick[change.id] = startedInJoystick
+                                if (!startedInJoystick) {
+                                    startContinuousFire(change.id)
+                                }
                             }
                             if (change.changedToUpIgnoreConsumed()) {
                                 val startedInJoystick = pointerStartsInJoystick.remove(change.id) ?: false
                                 if (!startedInJoystick && triangleCenter != Offset.Zero) {
-                                    val shotIntervalMillis = 333L
-                                    if (change.uptimeMillis - lastShotTimeMillis >= shotIntervalMillis) {
-                                        projectiles.add(Projectile(center = triangleCenter, size = projectileSize))
-                                        lastShotTimeMillis = change.uptimeMillis
-                                    }
+                                    stopContinuousFire(change.id)
+                                    tryFireProjectile(change.uptimeMillis)
                                 }
                             }
                             if (change.previousPressed && !change.pressed) {
                                 pointerStartsInJoystick.remove(change.id)
+                                stopContinuousFire(change.id)
                             }
                         }
                     }
