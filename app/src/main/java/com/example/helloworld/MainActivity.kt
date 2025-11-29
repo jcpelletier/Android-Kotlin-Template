@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun GameScreen() {
     val density = LocalDensity.current
-    val triangleSide = 80.dp
+    val triangleSide = 40.dp
     val triangleSidePx = with(density) { triangleSide.toPx() }
     val halfBase = triangleSidePx / 2f
     val triangleHeight = triangleSidePx * sqrt(3f) / 2f
@@ -76,7 +76,7 @@ private fun GameScreen() {
             withFrameNanos { timestamp ->
                 if (lastTimestamp != 0L) {
                     val deltaSeconds = (timestamp - lastTimestamp) / 1_000_000_000f
-                    val speed = 500f
+                    val speed = 750f
                     val input = joystickInput
                     val delta = Offset(input.x * speed * deltaSeconds, input.y * speed * deltaSeconds)
                     val proposedCenter = triangleCenter + delta
