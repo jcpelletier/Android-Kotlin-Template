@@ -6,7 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -26,7 +25,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInParent
@@ -71,6 +74,7 @@ private fun GameScreen() {
     var joystickInput by remember { mutableStateOf(Offset.Zero) }
     val projectiles = remember { mutableStateListOf<Projectile>() }
     var joystickBounds by remember { mutableStateOf<Rect?>(null) }
+    var lastShotTimeMillis by remember { mutableStateOf(0L) }
 
     LaunchedEffect(containerSize) {
         if (containerSize != IntSize.Zero) {
@@ -115,11 +119,28 @@ private fun GameScreen() {
             .fillMaxSize()
             .background(Color(0xFF101010))
             .pointerInput(containerSize, joystickBounds, triangleCenter) {
-                detectTapGestures { offset ->
-                    val joystickArea = joystickBounds
-                    if (joystickArea == null || !joystickArea.contains(offset)) {
-                        if (triangleCenter != Offset.Zero) {
-                            projectiles.add(Projectile(center = triangleCenter, size = projectileSize))
+                awaitPointerEventScope {
+                    val pointerStartsInJoystick = mutableMapOf<PointerId, Boolean>()
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { change ->
+                            if (change.changedToDownIgnoreConsumed()) {
+                                val startedInJoystick = joystickBounds?.contains(change.position) == true
+                                pointerStartsInJoystick[change.id] = startedInJoystick
+                            }
+                            if (change.changedToUpIgnoreConsumed()) {
+                                val startedInJoystick = pointerStartsInJoystick.remove(change.id) ?: false
+                                if (!startedInJoystick && triangleCenter != Offset.Zero) {
+                                    val shotIntervalMillis = 333L
+                                    if (change.uptimeMillis - lastShotTimeMillis >= shotIntervalMillis) {
+                                        projectiles.add(Projectile(center = triangleCenter, size = projectileSize))
+                                        lastShotTimeMillis = change.uptimeMillis
+                                    }
+                                }
+                            }
+                            if (change.previousPressed && !change.pressed) {
+                                pointerStartsInJoystick.remove(change.id)
+                            }
                         }
                     }
                 }
