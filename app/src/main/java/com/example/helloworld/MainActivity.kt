@@ -1,6 +1,7 @@
 package com.example.helloworld
 
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -13,24 +14,44 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.runtime.ExperimentalComposeApi
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.consume
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -48,7 +69,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalComposeApi::class)
+@OptIn(ExperimentalComposeApi::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun GameScreen() {
     val density = LocalDensity.current
@@ -58,10 +79,43 @@ private fun GameScreen() {
     val triangleHeight = triangleSidePx * sqrt(3f) / 2f
     val topOffset = triangleHeight * 2f / 3f
     val bottomOffset = triangleHeight / 3f
+    val projectileSpeed = 750f * 4f
+    val projectileSize = with(density) { Offset(12.dp.toPx(), 20.dp.toPx()) }
+    val shotIntervalMillis = 333L
 
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
     var triangleCenter by remember { mutableStateOf(Offset.Zero) }
     var joystickInput by remember { mutableStateOf(Offset.Zero) }
+    val projectiles = remember { mutableStateListOf<Projectile>() }
+    var joystickBounds by remember { mutableStateOf<Rect?>(null) }
+    var lastShotTimeMillis by remember { mutableStateOf(0L) }
+    val firingJobs = remember { mutableStateMapOf<PointerId, Job>() }
+    val coroutineScope = rememberCoroutineScope()
+
+    fun tryFireProjectile(now: Long) {
+        if (triangleCenter == Offset.Zero) return
+        if (now - lastShotTimeMillis >= shotIntervalMillis) {
+            projectiles.add(Projectile(center = triangleCenter, size = projectileSize))
+            lastShotTimeMillis = now
+        }
+    }
+
+    fun startContinuousFire(pointerId: PointerId) {
+        if (firingJobs.containsKey(pointerId)) return
+        val job = coroutineScope.launch {
+            while (isActive) {
+                val now = SystemClock.uptimeMillis()
+                tryFireProjectile(now)
+                val waitTime = (shotIntervalMillis - (now - lastShotTimeMillis)).coerceAtLeast(16L)
+                delay(waitTime)
+            }
+        }
+        firingJobs[pointerId] = job
+    }
+
+    fun stopContinuousFire(pointerId: PointerId) {
+        firingJobs.remove(pointerId)?.cancel()
+    }
 
     LaunchedEffect(containerSize) {
         if (containerSize != IntSize.Zero) {
@@ -86,6 +140,15 @@ private fun GameScreen() {
                         minY = topOffset,
                         maxY = containerSize.height - bottomOffset
                     )
+
+                    val updatedProjectiles = projectiles.mapNotNull { projectile ->
+                        val nextCenter = projectile.center + Offset(0f, -projectileSpeed * deltaSeconds)
+                        val newProjectile = projectile.copy(center = nextCenter)
+                        val isOutOfBounds = nextCenter.y + projectileSize.y / 2f < 0f
+                        if (isOutOfBounds) null else newProjectile
+                    }
+                    projectiles.clear()
+                    projectiles.addAll(updatedProjectiles)
                 }
                 lastTimestamp = timestamp
             }
@@ -96,6 +159,34 @@ private fun GameScreen() {
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF101010))
+            .pointerInput(containerSize, joystickBounds, triangleCenter) {
+                awaitPointerEventScope {
+                    val pointerStartsInJoystick = mutableMapOf<PointerId, Boolean>()
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { change ->
+                            if (change.changedToDownIgnoreConsumed()) {
+                                val startedInJoystick = joystickBounds?.contains(change.position) == true
+                                pointerStartsInJoystick[change.id] = startedInJoystick
+                                if (!startedInJoystick) {
+                                    startContinuousFire(change.id)
+                                }
+                            }
+                            if (change.changedToUpIgnoreConsumed()) {
+                                val startedInJoystick = pointerStartsInJoystick.remove(change.id) ?: false
+                                if (!startedInJoystick && triangleCenter != Offset.Zero) {
+                                    stopContinuousFire(change.id)
+                                    tryFireProjectile(change.uptimeMillis)
+                                }
+                            }
+                            if (change.previousPressed && !change.pressed) {
+                                pointerStartsInJoystick.remove(change.id)
+                                stopContinuousFire(change.id)
+                            }
+                        }
+                    }
+                }
+            }
             .onGloballyPositioned { layoutCoordinates ->
                 containerSize = layoutCoordinates.size
             }
@@ -103,6 +194,13 @@ private fun GameScreen() {
         Canvas(modifier = Modifier.fillMaxSize()) {
             if (containerSize != IntSize.Zero && triangleCenter != Offset.Zero) {
                 drawTriangle(center = triangleCenter, side = triangleSidePx, color = Color.Red)
+                projectiles.forEach { projectile ->
+                    drawOval(
+                        color = Color.Yellow,
+                        topLeft = projectile.center - Offset(projectile.size.x / 2f, projectile.size.y / 2f),
+                        size = Size(projectile.size.x, projectile.size.y)
+                    )
+                }
             }
         }
 
@@ -110,7 +208,8 @@ private fun GameScreen() {
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 24.dp, bottom = 24.dp),
-            onOffsetChanged = { joystickInput = it }
+            onOffsetChanged = { joystickInput = it },
+            onBoundsChanged = { joystickBounds = it }
         )
     }
 }
@@ -120,7 +219,8 @@ private fun GameScreen() {
 private fun Joystick(
     modifier: Modifier = Modifier,
     radius: Dp = 80.dp,
-    onOffsetChanged: (Offset) -> Unit
+    onOffsetChanged: (Offset) -> Unit,
+    onBoundsChanged: (Rect) -> Unit
 ) {
     val density = LocalDensity.current
     val radiusPx = with(density) { radius.toPx() }
@@ -130,6 +230,9 @@ private fun Joystick(
     Box(
         modifier = modifier
             .size(radius * 2)
+            .onGloballyPositioned { coordinates ->
+                onBoundsChanged(coordinates.boundsInParent())
+            }
             .pointerInput(radiusPx) {
                 detectDragGestures(
                     onDragStart = { offset ->
@@ -198,6 +301,11 @@ private fun Offset.coerceWithin(minX: Float, maxX: Float, minY: Float, maxY: Flo
     val clampedY = y.coerceIn(minY, maxY)
     return Offset(clampedX, clampedY)
 }
+
+private data class Projectile(
+    val center: Offset,
+    val size: Offset
+)
 
 private fun Offset.normalized(radius: Float): Offset {
     if (radius == 0f) return Offset.Zero
